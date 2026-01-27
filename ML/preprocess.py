@@ -11,7 +11,8 @@ from sklearn.pipeline import Pipeline
 
 
 DATA_PATH = "data/telco.csv"
-PIPELINE_PATH = "ml/preprocess_pipeline.pkl"
+# Save pipeline next to this script (when run from the ML/ folder)
+PIPELINE_PATH = "preprocess_pipeline.pkl"
 
 
 def load_data(path=DATA_PATH):
@@ -40,7 +41,8 @@ def build_preprocessing_pipeline(df: pd.DataFrame):
     X = df.drop(columns=["Churn"])
 
     # Identify column types
-    categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
+    # select both object and new pandas string dtype to avoid Pandas4Warning
+    categorical_cols = X.select_dtypes(include=["object", "string"]).columns.tolist()
     numerical_cols = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
 
     # Pipelines
@@ -48,8 +50,9 @@ def build_preprocessing_pipeline(df: pd.DataFrame):
         ("scaler", StandardScaler())
     ])
 
+    # use `sparse_output=False` for newer scikit-learn compatibility
     categorical_transformer = Pipeline(steps=[
-        ("onehot", OneHotEncoder(handle_unknown="ignore", sparse=False))
+        ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
     ])
 
     preprocessor = ColumnTransformer(
