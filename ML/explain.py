@@ -1,13 +1,15 @@
 # ml/explain.py
 
+import os
 import pandas as pd
 import joblib
 import shap
 import numpy as np
 
-
-PIPELINE_PATH = "preprocess_pipeline.pkl"
-MODEL_PATH = "model.pkl"
+# Resolve artifact paths relative to this file
+BASE_DIR = os.path.dirname(__file__)
+PIPELINE_PATH = os.path.join(BASE_DIR, "preprocess_pipeline.pkl")
+MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 
 
 # Load artifacts once

@@ -1,12 +1,15 @@
 # ml/predict.py
 
+import os
 import pandas as pd
 import joblib
 
-PIPELINE_PATH = "preprocess_pipeline.pkl"
+# Resolve artifact paths relative to this file so imports work from anywhere
+BASE_DIR = os.path.dirname(__file__)
+PIPELINE_PATH = os.path.join(BASE_DIR, "preprocess_pipeline.pkl")
 # Prefer the trained model file present in the ML/ folder
-MODEL_PATH = "model.pkl"
-METADATA_PATH = "model_metadata.pkl"
+MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+METADATA_PATH = os.path.join(BASE_DIR, "model_metadata.pkl")
 
 
 # Load artifacts once
