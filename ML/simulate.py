@@ -1,18 +1,11 @@
 # ml/simulate.py
 
 import copy
-import pandas as pd
-import joblib
 
-from predict import predict_churn
+from ML.predict import predict_churn
 
-
-PIPELINE_PATH = "preprocess_pipeline.pkl"
-MODEL_PATH = "model.pkl"
-
-# Load artifacts (predict.py already loads these, but kept explicit for clarity)
-preprocessor = joblib.load(PIPELINE_PATH)
-model = joblib.load(MODEL_PATH)
+# `predict_churn` loads artifacts using paths resolved relative to the ML package.
+# Avoid loading artifacts here so module import works regardless of CWD.
 
 
 def apply_actions(customer_data: dict, actions: list) -> dict:
