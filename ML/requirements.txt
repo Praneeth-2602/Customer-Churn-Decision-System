@@ -1,0 +1,17 @@
+# Core
+numpy
+pandas
+
+# Machine Learning
+scikit-learn
+xgboost
+shap
+joblib
+
+# Backend (for later steps)
+fastapi
+uvicorn
+
+# Optional (nice to have)
+matplotlib
+seaborn
