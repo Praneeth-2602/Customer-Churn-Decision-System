@@ -1,10 +1,10 @@
 from fastapi import FastAPI
-from schemas import CustomerInput, AnalyzeResponse
+from Backend.schemas import CustomerInput, AnalyzeResponse
 
-from ..ML.predict import predict_churn
-from ..ML.explain import explain_customer
-from ..ML.actions import recommend_actions
-from ..ML.simulate import simulate_retention
+from ML.predict import predict_churn
+from ML.explain import explain_customer
+from ML.actions import recommend_actions
+from ML.simulate import simulate_retention
 
 
 app = FastAPI(
