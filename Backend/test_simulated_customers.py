@@ -89,7 +89,12 @@ def test_simulated_profiles():
     for profile in ["low", "medium", "high"]:
         customer = generate_customer(profile)
 
-        response = requests.post(API_URL, json=customer)
+        payload = {
+            "dataset": "telco",
+            "customer": customer
+        }
+
+        response = requests.post(API_URL, json=payload)
         result = response.json()
 
         print(f"Profile: {profile.upper()}")

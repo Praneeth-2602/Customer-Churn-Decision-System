@@ -1,86 +1,105 @@
 # ml/preprocess.py
 
+import os
 import pandas as pd
-import numpy as np
 import joblib
-
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
-
-DATA_PATH = "data/telco.csv"
-# Save pipeline next to this script (when run from the ML/ folder)
-PIPELINE_PATH = "preprocess_pipeline.pkl"
-
-
-def load_data(path=DATA_PATH):
-    df = pd.read_csv(path)
-    return df
+try:
+    from ML.config_loader import load_config
+except Exception:
+    # If the ML package isn't importable (running file directly), fall back
+    # to a local import that works when CWD is the ML/ folder.
+    from config_loader import load_config
 
 
-def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    # Drop customerID (identifier, no predictive value)
-    if "customerID" in df.columns:
-        df = df.drop(columns=["customerID"])
-
-    # TotalCharges has spaces -> convert to numeric
-    if "TotalCharges" in df.columns:
-        df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
-
-    # Drop rows with missing TotalCharges
-    df = df.dropna()
-
-    return df
+DATA_DIR = "data"
+MODEL_DIR = "models"
 
 
-def build_preprocessing_pipeline(df: pd.DataFrame):
-    # Target
-    y = df["Churn"].map({"Yes": 1, "No": 0})
-    X = df.drop(columns=["Churn"])
+def load_dataset(dataset_name: str) -> pd.DataFrame:
+    """
+    Load dataset CSV based on dataset name. Try ML/data and repo-root data/ locations.
+    """
+    candidates = [
+        f"{DATA_DIR}/{dataset_name}.csv",
+        f"ML/{DATA_DIR}/{dataset_name}.csv",
+        f"{os.path.dirname(__file__)}/{DATA_DIR}/{dataset_name}.csv",
+        f"{os.path.dirname(os.path.dirname(__file__))}/{DATA_DIR}/{dataset_name}.csv",
+    ]
+    for path in candidates:
+        try:
+            return pd.read_csv(path)
+        except FileNotFoundError:
+            continue
+    raise FileNotFoundError(f"Data file for dataset '{dataset_name}' not found. Tried: {candidates}")
 
-    # Identify column types
-    # select both object and new pandas string dtype to avoid Pandas4Warning
-    categorical_cols = X.select_dtypes(include=["object", "string"]).columns.tolist()
-    numerical_cols = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
 
-    # Pipelines
-    numeric_transformer = Pipeline(steps=[
-        ("scaler", StandardScaler())
-    ])
+def build_preprocessor(dataset_name: str, df: pd.DataFrame):
+    """
+    Build preprocessing pipeline using dataset config
+    """
+    cfg = load_config(dataset_name)
 
-    # use `sparse_output=False` for newer scikit-learn compatibility
-    categorical_transformer = Pipeline(steps=[
-        ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
-    ])
+    categorical_cols = cfg["categorical_features"]
+    numerical_cols = cfg["numerical_features"]
+
+    numeric_pipeline = Pipeline(
+        steps=[("scaler", StandardScaler())]
+    )
+
+    categorical_pipeline = Pipeline(
+        steps=[("onehot", OneHotEncoder(handle_unknown="ignore"))]
+    )
 
     preprocessor = ColumnTransformer(
         transformers=[
-            ("num", numeric_transformer, numerical_cols),
-            ("cat", categorical_transformer, categorical_cols)
+            ("num", numeric_pipeline, numerical_cols),
+            ("cat", categorical_pipeline, categorical_cols),
         ]
     )
 
-    return X, y, preprocessor
+    return preprocessor
 
 
-def preprocess_and_save():
-    df = load_data()
-    df = clean_data(df)
+def preprocess_and_save(dataset_name: str):
+    """
+    Fit and save preprocessing pipeline for a dataset
+    """
+    cfg = load_config(dataset_name)
+    df = load_dataset(dataset_name)
 
-    X, y, preprocessor = build_preprocessing_pipeline(df)
+    # Drop ID column if present
+    if cfg["id_column"] in df.columns:
+        df = df.drop(columns=[cfg["id_column"]])
 
-    # Fit preprocessor
+    # Handle TotalCharges-like numeric issues safely
+    for col in cfg["numerical_features"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df = df.dropna()
+
+    X = df.drop(columns=[cfg["target_column"]])
+
+    preprocessor = build_preprocessor(dataset_name, df)
     preprocessor.fit(X)
 
     # Save pipeline
-    joblib.dump(preprocessor, PIPELINE_PATH)
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    path = f"{MODEL_DIR}/{dataset_name}_preprocessor.pkl"
+    joblib.dump(preprocessor, path)
 
-    print("✅ Preprocessing pipeline saved at:", PIPELINE_PATH)
-
-    return X, y
+    print(f"✅ Preprocessor saved: {path}")
 
 
 if __name__ == "__main__":
-    preprocess_and_save()
+    # Example usage:
+    # preprocess_and_save("telco")
+    # preprocess_and_save("bank")
+
+    import sys
+    dataset = sys.argv[1]
+    preprocess_and_save(dataset)

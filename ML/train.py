@@ -1,52 +1,104 @@
 # ml/train.py
 
+import os
 import pandas as pd
 import joblib
-
 from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score, recall_score, classification_report
+from sklearn.metrics import roc_auc_score, recall_score
+
+try:
+    from ML.config_loader import load_config
+except ImportError:
+    from config_loader import load_config
 
 
-DATA_PATH = "data/telco.csv"
-PIPELINE_PATH = "preprocess_pipeline.pkl"
-MODEL_PATH = "model.pkl"
-
-# Constants for prediction threshold and class weighting
-THRESHOLD = 0.35
-SCALE_POS_WEIGHT = 2.7
-MODEL_METADATA_PATH = "model_metadata.pkl"
+DATA_DIR = "data"
+# Use models directory inside the ML package so artifacts live at
+# <repo-root>/ML/models rather than <repo-root>/models
+BASE_DIR = os.path.dirname(__file__)
+MODEL_DIR = os.path.join(BASE_DIR, "models")
 
 
-def load_data():
-    df = pd.read_csv(DATA_PATH)
+def load_dataset(dataset_name: str) -> pd.DataFrame:
+    candidates = [
+        f"{DATA_DIR}/{dataset_name}.csv",
+        f"ML/{DATA_DIR}/{dataset_name}.csv",
+        f"{os.path.dirname(__file__)}/{DATA_DIR}/{dataset_name}.csv",
+        f"{os.path.dirname(os.path.dirname(__file__))}/{DATA_DIR}/{dataset_name}.csv",
+    ]
+    for path in candidates:
+        try:
+            return pd.read_csv(path)
+        except FileNotFoundError:
+            continue
+    raise FileNotFoundError(f"Data file for dataset '{dataset_name}' not found. Tried: {candidates}")
 
-    # Drop customerID
-    if "customerID" in df.columns:
-        df = df.drop(columns=["customerID"])
 
-    # Fix TotalCharges
-    if "TotalCharges" in df.columns:
-        df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+def train_model(dataset_name: str):
+    cfg = load_config(dataset_name)
+    df = load_dataset(dataset_name)
+
+    # Drop ID column
+    if cfg["id_column"] in df.columns:
+        df = df.drop(columns=[cfg["id_column"]])
+
+    # Convert numeric columns safely
+    for col in cfg["numerical_features"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df = df.dropna()
-    return df
 
+    # Target encoding (be resilient to YAML boolean parsing of Yes/No)
+    pos = cfg.get("positive_class")
+    neg = cfg.get("negative_class")
 
-def train_model():
-    df = load_data()
+    def _map_target(series):
+        # if config used booleans (PyYAML converts Yes/No to True/False),
+        # accept common textual representations as well
+        if isinstance(pos, bool) or isinstance(neg, bool):
+            mapper = {
+                True: 1, False: 0,
+                "Yes": 1, "No": 0, "YES": 1, "NO": 0,
+                "yes": 1, "no": 0, "Y": 1, "N": 0, "y": 1, "n": 0,
+                "1": 1, "0": 0, 1: 1, 0: 0
+            }
+            return series.map(lambda v: mapper.get(v, None))
+        else:
+            return series.map({pos: 1, neg: 0})
 
-    # Target
-    y = df["Churn"].map({"Yes": 1, "No": 0})
-    X = df.drop(columns=["Churn"])
+    y = _map_target(df[cfg["target_column"]])
+
+    X = df.drop(columns=[cfg["target_column"]])
+
+    # Drop rows with unmapped/NaN target values
+    missing = y.isna()
+    if missing.any():
+        import warnings
+        warnings.warn(f"{missing.sum()} rows have unexpected target values and will be dropped.")
+        X = X.loc[~missing].reset_index(drop=True)
+        y = y.loc[~missing].reset_index(drop=True)
+
+    if len(y) == 0:
+        raise ValueError(f"No valid training rows found for dataset '{dataset_name}' after cleaning.")
+
+    # ensure integer labels
+    try:
+        y = y.astype(int)
+    except Exception:
+        pass
 
     # Load preprocessing pipeline
-    preprocessor = joblib.load(PIPELINE_PATH)
+    preprocessor_path = f"{MODEL_DIR}/{dataset_name}_preprocessor.pkl"
+    if not os.path.exists(MODEL_DIR):
+        raise FileNotFoundError(f"Model directory '{MODEL_DIR}' does not exist. Run preprocess first.")
+    if not os.path.exists(preprocessor_path):
+        raise FileNotFoundError(f"Preprocessor for '{dataset_name}' not found at {preprocessor_path}. Run preprocess first.")
+    preprocessor = joblib.load(preprocessor_path)
 
-    # Transform features
     X_processed = preprocessor.transform(X)
 
-    # Train-test split (IMPORTANT: stratified)
     X_train, X_test, y_train, y_test = train_test_split(
         X_processed,
         y,
@@ -55,49 +107,40 @@ def train_model():
         random_state=42
     )
 
-    # Model
+    # Model (robust defaults for churn)
     model = XGBClassifier(
         n_estimators=300,
         max_depth=5,
         learning_rate=0.05,
         subsample=0.8,
         colsample_bytree=0.8,
-        scale_pos_weight=SCALE_POS_WEIGHT,
+        scale_pos_weight=(y_train.value_counts()[0] / y_train.value_counts()[1]),
         eval_metric="logloss",
         random_state=42
     )
 
-    # Train
     model.fit(X_train, y_train)
 
-    # Evaluate
-    y_prob = model.predict_proba(X_test)[:, 1]
-    y_pred = (y_prob >= THRESHOLD).astype(int)
+    # Evaluation
+    probs = model.predict_proba(X_test)[:, 1]
+    # Use a lower, fixed threshold for training-time evaluation only
+    preds = (probs >= 0.3).astype(int)
 
-    auc = roc_auc_score(y_test, y_prob)
-    recall = recall_score(y_test, y_pred)
+    auc = roc_auc_score(y_test, probs)
+    recall = recall_score(y_test, preds)
 
-    print("\n📊 Model Evaluation")
-    print("------------------")
-    print(f"ROC-AUC Score : {auc:.4f}")
-    print(f"Recall (Churn=Yes) : {recall:.4f}\n")
-
-    print("Classification Report:")
-    print(classification_report(y_test, y_pred))
+    print(f"\n📊 Dataset: {dataset_name}")
+    print(f"ROC-AUC : {auc:.4f}")
+    print(f"Recall  : {recall:.4f}")
 
     # Save model
-    joblib.dump(model, MODEL_PATH)
-    print(f"✅ Model saved at: {MODEL_PATH}")
+    model_path = f"{MODEL_DIR}/{dataset_name}_model.pkl"
+    joblib.dump(model, model_path)
 
-    # Save metadata so other components use the same threshold and weighting
-    metadata = {
-        "threshold": THRESHOLD,
-        "scale_pos_weight": SCALE_POS_WEIGHT
-    }
-
-    joblib.dump(metadata, MODEL_METADATA_PATH)
-    print(f"✅ Model metadata saved at: {MODEL_METADATA_PATH}")
+    print(f"✅ Model saved: {model_path}")
 
 
 if __name__ == "__main__":
-    train_model()
+    import sys
+    dataset = sys.argv[1]
+    train_model(dataset)

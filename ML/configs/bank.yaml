@@ -1,0 +1,85 @@
+# configs/bank.yaml
+
+dataset_name: bank
+
+# =========================
+# Dataset identification
+# =========================
+id_column: CustomerId
+target_column: Exited
+positive_class: 1
+negative_class: 0
+
+# =========================
+# Feature definitions
+# =========================
+
+categorical_features:
+  - Geography
+  - Gender
+  - Card Type
+
+numerical_features:
+  - CreditScore
+  - Age
+  - Tenure
+  - Balance
+  - NumOfProducts
+  - HasCrCard
+  - IsActiveMember
+  - EstimatedSalary
+  - Satisfaction Score
+  - Point Earned
+  - Complain
+
+# =========================
+# Actionable feature groups
+# (used by actions.py & simulate.py)
+# =========================
+
+actionable_features:
+  pricing:
+    - Balance
+    - NumOfProducts
+
+  engagement:
+    - IsActiveMember
+    - Satisfaction Score
+    - Point Earned
+
+  support:
+    - Complain
+
+  loyalty:
+    - Tenure
+    - Card Type
+
+# =========================
+# Risk thresholds
+# =========================
+
+risk_thresholds:
+  low: 0.3
+  medium: 0.6
+  high: 0.7
+
+# =========================
+# Retention actions metadata
+# =========================
+
+retention_actions:
+  pricing:
+    action: "Offer personalized financial benefits or fee waiver"
+    expected_churn_reduction: 0.14
+
+  engagement:
+    action: "Send personalized engagement and investment recommendations"
+    expected_churn_reduction: 0.10
+
+  support:
+    action: "Priority customer support and issue resolution"
+    expected_churn_reduction: 0.18
+
+  loyalty:
+    action: "Offer loyalty rewards or card upgrade"
+    expected_churn_reduction: 0.12

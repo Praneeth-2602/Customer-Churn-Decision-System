@@ -4,63 +4,44 @@ import os
 import pandas as pd
 import joblib
 import shap
-import numpy as np
-
-# Resolve artifact paths relative to this file
-BASE_DIR = os.path.dirname(__file__)
-PIPELINE_PATH = os.path.join(BASE_DIR, "preprocess_pipeline.pkl")
-MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+# from ML.config_loader import load_config
 
 
-# Load artifacts once
-preprocessor = joblib.load(PIPELINE_PATH)
-model = joblib.load(MODEL_PATH)
+def _paths_for_dataset(dataset_name: str):
+    base = os.path.dirname(__file__)
+    models_dir = os.path.join(base, "models")
+    preprocessor_path = os.path.join(models_dir, f"{dataset_name}_preprocessor.pkl")
+    model_path = os.path.join(models_dir, f"{dataset_name}_model.pkl")
+    return preprocessor_path, model_path
 
-# Build SHAP explainer
-explainer = shap.TreeExplainer(model)
 
-
-def get_feature_names():
-    """
-    Extract final feature names after preprocessing
-    """
+def _get_feature_names(preprocessor):
     num_features = preprocessor.transformers_[0][2]
-
     cat_pipeline = preprocessor.transformers_[1][1]
     cat_features = preprocessor.transformers_[1][2]
-
     onehot = cat_pipeline.named_steps["onehot"]
     cat_feature_names = onehot.get_feature_names_out(cat_features)
-
     return list(num_features) + list(cat_feature_names)
 
 
-FEATURE_NAMES = get_feature_names()
+def explain_customer(dataset_name: str, customer_data: dict, top_k: int = 5) -> dict:
+    preprocessor_path, model_path = _paths_for_dataset(dataset_name)
+    preprocessor = joblib.load(preprocessor_path)
+    model = joblib.load(model_path)
 
+    explainer = shap.TreeExplainer(model)
 
-def explain_customer(customer_data: dict, top_k: int = 5) -> dict:
-    """
-    Returns top positive and negative contributors for churn
-    """
+    FEATURE_NAMES = _get_feature_names(preprocessor)
 
-    # Convert input to DataFrame
     df = pd.DataFrame([customer_data])
-
-    # Transform features
     X_processed = preprocessor.transform(df)
 
-    # SHAP values
     shap_values = explainer.shap_values(X_processed)[0]
 
-    # Pair features with SHAP values
     feature_impacts = list(zip(FEATURE_NAMES, shap_values))
-
-    # Sort by absolute impact
     feature_impacts.sort(key=lambda x: abs(x[1]), reverse=True)
 
-    # Top contributors
     top_features = feature_impacts[:top_k]
-
     explanation = []
     for feature, impact in top_features:
         explanation.append({
@@ -69,9 +50,7 @@ def explain_customer(customer_data: dict, top_k: int = 5) -> dict:
             "effect": "increases churn" if impact > 0 else "reduces churn"
         })
 
-    return {
-        "top_contributors": explanation
-    }
+    return {"top_contributors": explanation}
 
 
 if __name__ == "__main__":

@@ -1,0 +1,89 @@
+# configs/telco.yaml
+
+dataset_name: telco
+
+# =========================
+# Dataset identification
+# =========================
+id_column: customerID
+target_column: Churn
+positive_class: Yes
+negative_class: No
+
+# =========================
+# Feature definitions
+# =========================
+
+categorical_features:
+  - gender
+  - Partner
+  - Dependents
+  - PhoneService
+  - MultipleLines
+  - InternetService
+  - OnlineSecurity
+  - OnlineBackup
+  - DeviceProtection
+  - TechSupport
+  - StreamingTV
+  - StreamingMovies
+  - Contract
+  - PaperlessBilling
+  - PaymentMethod
+
+numerical_features:
+  - SeniorCitizen
+  - tenure
+  - MonthlyCharges
+  - TotalCharges
+
+# =========================
+# Actionable feature groups
+# (used by actions.py & simulate.py)
+# =========================
+
+actionable_features:
+  pricing:
+    - MonthlyCharges
+
+  contract:
+    - Contract
+
+  support:
+    - TechSupport
+    - OnlineSecurity
+    - OnlineBackup
+
+  engagement:
+    - tenure
+
+# =========================
+# Business rules (optional but powerful)
+# =========================
+
+risk_thresholds:
+  low: 0.3
+  medium: 0.6
+  high: 0.7
+
+# =========================
+# Retention actions metadata
+# (used for generalization)
+# =========================
+
+retention_actions:
+  pricing:
+    action: "Offer 20% discount for next 3 months"
+    expected_churn_reduction: 0.15
+
+  contract:
+    action: "Offer incentive to switch to long-term contract"
+    expected_churn_reduction: 0.20
+
+  support:
+    action: "Provide free tech support and security add-ons"
+    expected_churn_reduction: 0.12
+
+  engagement:
+    action: "Send personalized engagement email"
+    expected_churn_reduction: 0.08

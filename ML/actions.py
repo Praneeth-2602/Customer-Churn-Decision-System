@@ -2,88 +2,97 @@
 
 from typing import List, Dict
 
+try:
+    from ML.config_loader import load_config
+except ImportError:
+    from config_loader import load_config
+
 
 def recommend_actions(
+    dataset_name: str,
     churn_probability: float,
     explanations: List[Dict],
-    customer_data: Dict
 ) -> Dict:
     """
-    Recommends retention actions based on churn risk and SHAP explanations.
+    Recommend retention actions using dataset-specific configuration
+    and SHAP explanations.
 
     Parameters:
-    - churn_probability (float): Predicted churn probability
-    - explanations (list): Output from explain.py (top contributors)
-    - customer_data (dict): Raw customer input data
+    - dataset_name: str
+    - churn_probability: float
+    - explanations: list of SHAP explanation dicts
 
     Returns:
-    - dict containing recommended actions and expected impact
+    - dict with recommended actions and expected impact
     """
+
+    cfg = load_config(dataset_name)
+
+    actionable_features = cfg["actionable_features"]
+    retention_actions = cfg["retention_actions"]
+    risk_thresholds = cfg["risk_thresholds"]
 
     actions = []
     total_improvement = 0.0
 
-    # Extract churn-increasing features
+    # Extract churn-increasing features only
     churn_drivers = {
         e["feature"]: e["impact"]
         for e in explanations
         if e["impact"] > 0
     }
 
-    # 🔴 HIGH RISK CUSTOMERS
-    if churn_probability >= 0.7:
-
-        # Pricing sensitivity
-        if any(f in churn_drivers for f in ["MonthlyCharges", "TotalCharges"]):
-            actions.append({
-                "action": "Offer 20% discount for next 3 months",
-                "reason": "High price sensitivity detected",
-                "expected_churn_reduction": 0.15
-            })
-            total_improvement += 0.15
-
-        # Contract type
-        if "Contract_Month-to-month" in churn_drivers:
-            actions.append({
-                "action": "Offer incentive to switch to annual contract",
-                "reason": "Month-to-month contracts are associated with higher churn",
-                "expected_churn_reduction": 0.20
-            })
-            total_improvement += 0.20
-
-        # Support & security
-        if any(f in churn_drivers for f in ["TechSupport_No", "OnlineSecurity_No"]):
-            actions.append({
-                "action": "Provide free tech support and security add-ons",
-                "reason": "Lack of support/security increases dissatisfaction",
-                "expected_churn_reduction": 0.12
-            })
-            total_improvement += 0.12
-
-    # 🟡 MEDIUM RISK CUSTOMERS
-    elif churn_probability >= 0.4:
-        actions.append({
-            "action": "Send personalized engagement and usage tips email",
-            "reason": "Moderate churn risk detected",
-            "expected_churn_reduction": 0.08
-        })
-        total_improvement += 0.08
-
-    # 🟢 LOW RISK CUSTOMERS
+    # Decide risk band
+    if churn_probability >= risk_thresholds["high"]:
+        risk_band = "HIGH"
+    elif churn_probability >= risk_thresholds["medium"]:
+        risk_band = "MEDIUM"
     else:
-        actions.append({
-            "action": "No immediate action required",
-            "reason": "Customer shows low churn risk",
-            "expected_churn_reduction": 0.0
-        })
+        risk_band = "LOW"
 
-    # Safety cap
+    # LOW risk → no action
+    if risk_band == "LOW":
+        return {
+            "recommended_actions": [
+                {
+                    "action": "No immediate action required",
+                    "reason": "Customer shows low churn risk",
+                    "expected_churn_reduction": 0.0
+                }
+            ],
+            "estimated_total_improvement": 0.0,
+            "expected_new_churn_probability": round(churn_probability, 4)
+        }
+
+    # HIGH or MEDIUM risk → generate actions
+    for group, features in actionable_features.items():
+        # Check if any churn driver belongs to this action group
+        triggered = False
+
+        for feature in churn_drivers:
+            # SHAP feature names may be one-hot encoded
+            if any(feature.startswith(f) for f in features):
+                triggered = True
+                break
+
+        if triggered and group in retention_actions:
+            action_cfg = retention_actions[group]
+
+            actions.append({
+                "action": action_cfg["action"],
+                "reason": f"Churn drivers detected in {group} features",
+                "expected_churn_reduction": action_cfg["expected_churn_reduction"]
+            })
+
+            total_improvement += action_cfg["expected_churn_reduction"]
+
+    # Safety cap (never reduce below zero)
     total_improvement = min(total_improvement, churn_probability)
 
     return {
         "recommended_actions": actions,
-        "estimated_total_improvement": round(total_improvement, 3),
+        "estimated_total_improvement": round(total_improvement, 4),
         "expected_new_churn_probability": round(
-            churn_probability - total_improvement, 3
+            churn_probability - total_improvement, 4
         )
     }

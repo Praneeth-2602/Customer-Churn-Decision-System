@@ -34,8 +34,12 @@ def test_backend_pipeline():
         "TotalCharges": 950.2
     }
 
-    # Send request
-    response = requests.post(API_URL, json=customer)
+    # Send request (include dataset)
+    payload = {
+        "dataset": "telco",
+        "customer": customer
+    }
+    response = requests.post(API_URL, json=payload)
 
     if response.status_code != 200:
         print("❌ API Error")
