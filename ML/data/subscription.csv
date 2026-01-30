@@ -1,4 +1,4 @@
-AccountAge,MonthlyCharges,TotalCharges,SubscriptionType,PaymentMethod,PaperlessBilling,ContentType,MultiDeviceAccess,DeviceRegistered,ViewingHoursPerWeek,AverageViewingDuration,ContentDownloadsPerMonth,GenrePreference,UserRating,SupportTicketsPerMonth,Gender,WatchlistSize,ParentalControl,SubtitlesEnabled,CustomerID,Churn
+CustomerID,deprecated_note
 42,11.32195032980162,475.5219138516681,Basic,Electronic check,Yes,Movies,Yes,Tablet,0.3868523189909584,24.59336128901439,25,Comedy,3.489464519485509,7,Female,15,No,No,LOHRYYC9E8,0
 95,12.8109146006735,1217.0368870639825,Standard,Electronic check,Yes,TV Shows,No,Mobile,37.122999911467,102.86079509716252,21,Comedy,2.251859954914927,3,Male,8,No,,RIH7RFEZCS,0
 6,,91.58330353602958,Standard,Credit card,Yes,TV Shows,No,Tablet,30.7169444023015,10.51241512260625,29,Fantasy,,4,Male,14,No,Yes,JB5J8X2UY1,1
